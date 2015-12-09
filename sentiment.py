@@ -1,4 +1,6 @@
 import re
+import pymongo
+from pymongo import MongoClient
 import nltk, nltk.classify.util
 from nltk.classify import NaiveBayesClassifier
 # search patterns for features
@@ -62,6 +64,13 @@ class TwittElection:
                 word = line.strip()
                 self.stopwords.append(word)
 
+    # Connect to annotated collection
+    def connect_to_annotated_tweets(self):
+        client = MongoClient('localhost', 27017)
+        db = client['tweet_database']
+        annotated_tweet_collection = db['annotated']
+        return annotated_tweet_collection
+
 
     def featureExtract(self,words):
         featureList = {}
@@ -75,32 +84,49 @@ class TwittElection:
         for word in words:
             if len(word)>2 and not word in self.stopwords:
                 featureList[word] = True
-        print featureList
         return featureList
 
     def evaluate(self):
-        with open('temp','r') as document:
-            posTweets = []
-            for sentence in document:
-                lower = sentence.lower()
-                text = re.sub( '\s+', ' ', lower ).strip()
-                words = text.split()
-                tweet = [self.featureExtract(words), 'pos']
-                posTweets.append(tweet)
-        classifier = NaiveBayesClassifier.train(posTweets)
+        annotated = self.connect_to_annotated_tweets()
+	trainData = []
+	testData = []
+	count = 0
+	for tweet in annotated.find():
+	    count += 1
+	    if count <= 1000:
+		trainData.append((tweet['text'].encode('ascii', 'ignore'),tweet['sentiment']))
+	    else:
+		testData.append((tweet['text'].encode('ascii','ignore'),tweet['sentiment'])) 
+        print count
+	tweets = []
+        for (tweet, sentiment) in trainData:
+	    lower = tweet.lower()
+            text = re.sub( '\s+', ' ', lower ).strip()
+            words = text.split()
+            features = [self.featureExtract(words), sentiment]
+	    tweets.append(features)
+        classifier = NaiveBayesClassifier.train(tweets)
 
         # testing
-        referenceSets = dict()
-        testSets = dict()
-        i=1
-        for j, (features, label) in enumerate(posTweets):
-            referenceSets[i] = label
+        #referenceSets = dict()
+        #testSets = dict()
+        i=0
+	tweets = []
+	for (tweet, sentiment) in testData:
+            lower = tweet.lower()
+            text = re.sub( '\s+', ' ', lower ).strip()
+            words = text.split()
+            features = [self.featureExtract(words), sentiment]
+            tweets.append(features)
+	correct = 0
+        for j, (features, label) in enumerate(tweets):
             predicted = classifier.classify(features)
-            testSets[i] = predicted
+            if predicted == label:
+		correct += 1
             i += 1
-        print referenceSets
-        print testSets
-
+	print "Correct = " + str(correct)
+	print "Total = " + str(i)
+	print "Accuracy = " + str(float(correct)/i)
 c = TwittElection()
 c.evaluate()
 
