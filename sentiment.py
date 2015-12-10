@@ -6,6 +6,13 @@ from nltk.classify import NaiveBayesClassifier
 # search patterns for features
 class TwittElection:
     def __init__(self):
+        self.candidates = ['berniesanders', 'hillaryclinton', 'martinomalley', 'donaldtrump','bencarson', 'marcorubio', 'tedcruz', 'jebbush', 'chrischristie',
+          'carlyfiorina', 'jimgilmore', 'randpaul', 'johnkasich' , 'mikehuckabee', \
+          'lindseygraham', 'ricksantorum', 'georgepataki' \
+         ]
+        self.collection = dict()
+        self.result = dict()
+
         self.testFeatures = \
             [('hasAddict',     (' addict',)), \
             ('hasAwesome',    ('awesome',)), \
@@ -71,6 +78,11 @@ class TwittElection:
         annotated_tweet_collection = db['annotated']
         return annotated_tweet_collection
 
+    def connect_to_collections(self):
+        client = MongoClient('localhost', 27017)
+        db = client['tweet_database']
+        for candidate in self.candidates:
+            self.collection[candidate] = db[candidate]
 
     def featureExtract(self,words):
         featureList = {}
@@ -88,45 +100,45 @@ class TwittElection:
 
     def evaluate(self):
         annotated = self.connect_to_annotated_tweets()
-	trainData = []
-	testData = []
-	count = 0
-	for tweet in annotated.find():
-	    count += 1
-	    if count <= 1000:
-		trainData.append((tweet['text'].encode('ascii', 'ignore'),tweet['sentiment']))
-	    else:
-		testData.append((tweet['text'].encode('ascii','ignore'),tweet['sentiment'])) 
-        print count
-	tweets = []
+        self.connect_to_collections()
+        trainData = []
+        testData = []
+        for tweet in annotated.find():
+            trainData.append((tweet['text'].encode('ascii', 'ignore'),tweet['sentiment']))
+        tweets = []
         for (tweet, sentiment) in trainData:
-	    lower = tweet.lower()
+            lower = tweet.lower()
             text = re.sub( '\s+', ' ', lower ).strip()
             words = text.split()
             features = [self.featureExtract(words), sentiment]
-	    tweets.append(features)
+            tweets.append(features)
         classifier = NaiveBayesClassifier.train(tweets)
 
         # testing
         #referenceSets = dict()
         #testSets = dict()
         i=0
-	tweets = []
-	for (tweet, sentiment) in testData:
-            lower = tweet.lower()
-            text = re.sub( '\s+', ' ', lower ).strip()
-            words = text.split()
-            features = [self.featureExtract(words), sentiment]
-            tweets.append(features)
-	correct = 0
-        for j, (features, label) in enumerate(tweets):
-            predicted = classifier.classify(features)
-            if predicted == label:
-		correct += 1
-            i += 1
-	print "Correct = " + str(correct)
-	print "Total = " + str(i)
-	print "Accuracy = " + str(float(correct)/i)
+        for candidate in self.candidates:
+            tweets = []
+            for tweet in self.collection[candidate]:
+                lower = tweet.lower()
+                text = re.sub( '\s+', ' ', lower ).strip()
+                words = text.split()
+                features = [self.featureExtract(words)]
+                tweets.append(features)
+            positive = 0
+            negative = 0
+            neutral = 0
+            for j, features in enumerate(tweets):
+                predicted = classifier.classify(features)
+                if predicted == 1:
+                    positive += 1
+                elif predicted == -1:
+                    negative += 1
+                elif predicted == 0:
+                    neutral += 1
+            self.result[candidate] = [positive,negative,neutral]
+
 c = TwittElection()
 c.evaluate()
 
