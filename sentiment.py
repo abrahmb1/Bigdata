@@ -82,7 +82,7 @@ class TwittElection:
         client = MongoClient('localhost', 27017)
         db = client['tweet_database']
         for candidate in self.candidates:
-            self.collection[candidate] = db[candidate]
+            self.collection[candidate] = db[candidate].find()
 
     def featureExtract(self,words):
         featureList = {}
@@ -120,16 +120,17 @@ class TwittElection:
         i=0
         for candidate in self.candidates:
             tweets = []
-            for tweet in self.collection[candidate]:
+            for cluster in self.collection[candidate]:
+		tweet = cluster['text'].encode('ascii', 'ignore')
                 lower = tweet.lower()
                 text = re.sub( '\s+', ' ', lower ).strip()
                 words = text.split()
-                features = [self.featureExtract(words)]
+                features = [self.featureExtract(words),1]
                 tweets.append(features)
             positive = 0
             negative = 0
             neutral = 0
-            for j, features in enumerate(tweets):
+            for j, (features,i) in enumerate(tweets):
                 predicted = classifier.classify(features)
                 if predicted == 1:
                     positive += 1
@@ -138,6 +139,7 @@ class TwittElection:
                 elif predicted == 0:
                     neutral += 1
             self.result[candidate] = [positive,negative,neutral]
+	print self.result
 
 c = TwittElection()
 c.evaluate()
